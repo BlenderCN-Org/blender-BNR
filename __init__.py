@@ -1,12 +1,12 @@
 bl_info = {
     "name": "Bone Name Rangler (BNR)",
     "author": "birdd",
-    "version": (1, 0),
+    "version": (0, 0, 1),
     "blender": (2, 75, 0),
     "location": "View3D > Properties > Bone Name Rangler",
     "description": "Set of tools for quickly renaming bones.",
     "warning": "",
-    "wiki_url": "",
+    "wiki_url": "https://github.com/birddiq/blender-BNR",
     "category": "Rigging",
     }
 
@@ -275,50 +275,148 @@ class BNR_piechain_template(bpy.types.Menu):
 
 ####DRAWING####
 def draw_text_3d(font_id, color, pos, width, height, msg):
-    pos = bpy_extras.view3d_utils.location_3d_to_region_2d(bpy.context.region, bpy.context.space_data.region_3d, pos, [-10, -500])
+
     blf.position(font_id, pos[0] + 10, pos[1], 0)
     blf.size(font_id, width, height)
-    blf.draw(font_id, msg)    
-    
 
-def bnr_draw_cage_3d_callback():
+    bgl.glEnable(bgl.GL_BLEND)
+        
+    bgl.glColor4f(color[0], color[1], color[2], color[3])
+    blf.draw(font_id, msg)    
+        
+    #Set gl back to defaults
+    
+    bgl.glColor4f(1.0, 1.0, 1.0, 1.0)
+    
+    bgl.glEnd()
+    
+def draw_text_outline_3d(font_id, color, outline_color, pos, width, height, msg):
+    #Outline
+    draw_text_3d(font_id, outline_color, [pos[0]-1, pos[1]-1], width, height, msg)
+    draw_text_3d(font_id, outline_color, [pos[0]-1, pos[1]+1], width, height, msg)
+    draw_text_3d(font_id, outline_color, [pos[0]+1, pos[1]+1], width, height, msg)
+    draw_text_3d(font_id, outline_color, [pos[0]+1, pos[1]-1], width, height, msg)
+    #Fill
+    draw_text_3d(font_id, color, pos, width, height, msg)
+    
+#Draw bone names
+def bnr_draw_names_callback():
+    #Get bone
     bone = get_selected_bone()
+    
+    #Return if there is no bone selected
     if bone is None:
         return
     
+    ###Variable setup
     font_id = 0
-    color = (1.0, 0.0, 0.0, 1.0)
+    #Name colors for each type of bone
+    selected_color = (1.0, 1.0, 1.0, 1.0)
+    selected_outline_color = (0.0, 0.0, 0.0, 1.0)
+    unselected_color = (0.0, 0.0, 0.0, 1.0)
+    parent_color = (1.0, 0.75, 0.75, 1.0)
+    child_color = (0.75, 1.0, 0.75, 1.0)
+    outline_color = (1.0, 1.0, 1.0, 1.0)
+    #Size, 28
     width = 28
     height = 28
+    
+    #Get child bone names
+    child_names = []
+    for child in bone.children:
+        child_names.append(child.name)
+        
+    parent_name = None
+    if bone.parent:
+        parent_name = bone.parent.name
 
+    
     for b in bpy.context.object.data.bones:
-        vec = (b.tail_local - b.head_local) / 2
-        print(b.name, b.center)
-        draw_text_3d(font_id, color, bpy.context.object.location + b.head_local + vec, width, height, b.name)
+        #Add the location of the armature's position with the head's position relative to armature
+        #Then add local bone center position
+        pos = bpy.context.object.location + b.head_local + ((b.tail_local - b.head_local) / 2)
+
+        
+        ##Translate 3d position to 2d position on viewport
+        pos = bpy_extras.view3d_utils.location_3d_to_region_2d(
+                bpy.context.region, 
+                bpy.context.space_data.region_3d, 
+                pos, 
+                [-10, -500])
+        #Center the text on the bone, this will not work without knowing scale of zoom
+        #pos = [pos[0] - (len(b.name) * width / 2), pos[1]]      
+            
+        ##Draw text                
+        if b.name == bone.name:
+            #outline
+            
+            #fill
+            draw_text_outline_3d(font_id, 
+                                 selected_color, 
+                                 selected_outline_color, 
+                                 pos, 
+                                 width, 
+                                 height, 
+                                 b.name
+            )
+                    
+        elif b.name in child_names:
+            #Child
+            draw_text_outline_3d(font_id,
+                                     child_color,
+                                     selected_outline_color,
+                                     pos,
+                                     width,
+                                     height,
+                                     b.name
+                )
+        elif parent_name == b.name:
+            #Parent
+            draw_text_outline_3d(font_id,
+                                 parent_color,
+                                 selected_outline_color,
+                                 pos,
+                                 width,
+                                 height,
+                                 b.name
+            )
+        else:
+            #Unselected
+            draw_text_3d(font_id,
+                                 unselected_color,
+                                 pos,
+                                 width,
+                                 height,
+                                 b.name
+            )
 
 
 bpy.types.Scene.bnr_widgets = {}    
 
-class BNR_draw_cage:
+##Non-registered class
+class BNR_DrawNames:
     def __init__(self):
         #self.handle_3d_cage = bpy.types.SpaceView3D.draw_handler_add(bnr_draw_cage_3d_callback, (), 'WINDOW', 'POST_VIEW')
-        self.handle_3d_cage = bpy.types.SpaceView3D.draw_handler_add(bnr_draw_cage_3d_callback, (), 'WINDOW', 'POST_PIXEL')
+        self.handle_3d_names = bpy.types.SpaceView3D.draw_handler_add(bnr_draw_names_callback, (), 'WINDOW', 'POST_PIXEL')
     
     def cleanup(self):
-        if self.handle_3d_cage:
-            bpy.types.SpaceView3D.draw_handler_remove(self.handle_3d_cage, 'WINDOW')
+        if self.handle_3d_names:
+            bpy.types.SpaceView3D.draw_handler_remove(self.handle_3d_names, 'WINDOW')
 
 
-def bnr_draw_cage(self, context):
-    b = bpy.context.scene.BNR_drawCage
+def bnr_draw_names(self, context):
+    b = bpy.context.scene.BNR_drawNames
     if b:
-        bpy.types.Scene.bnr_widgets["bone_cage"] = BNR_draw_cage()
+        bpy.types.Scene.bnr_widgets["draw_names"] = BNR_DrawNames()
     else:
-        if bpy.types.Scene.bnr_widgets["bone_cage"]:
-            bpy.types.Scene.bnr_widgets["bone_cage"].cleanup()
+        if bpy.types.Scene.bnr_widgets["draw_names"]:
+            print("bnr_draw_names: cleaning fuck")
+            bpy.types.Scene.bnr_widgets["draw_names"].cleanup()
+            del bpy.types.Scene.bnr_widgets["draw_names"]
 
 ###############
 
+#"Bone Name Rangler" panel class, the gui
 class BonePanel(bpy.types.Panel):
     bl_idname = "DATA_PT_bone_rangler"
     bl_label = "Bone Name Rangler"
@@ -329,7 +427,7 @@ class BonePanel(bpy.types.Panel):
     bpy.types.Scene.BNR_followChainBool = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.BNR_hideMatching = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.BNR_replaceDuplicate = bpy.props.BoolProperty(default=False)
-    bpy.types.Scene.BNR_drawCage = bpy.props.BoolProperty(update=bnr_draw_cage)
+    bpy.types.Scene.BNR_drawNames = bpy.props.BoolProperty(update=bnr_draw_names)
     bpy.types.Scene.BNR_bone_list = []
     
     handle_3d_cage = {}
@@ -369,8 +467,7 @@ class BonePanel(bpy.types.Panel):
             option_armature_row = option_armature_col.row()
             #LEFT
             t = option_armature_row.column()
-            t.prop(context.object.data, "show_names")
-            t.prop(context.scene, "BNR_drawCage", "Draw Cage")
+            t.prop(context.scene, "BNR_drawNames", "Draw Names")
             #RIGHT
             t = option_armature_row.column()
             t.prop(context.object, "show_x_ray")            
@@ -461,7 +558,10 @@ def register():
         
 def unregister():
     for widget in bpy.types.Scene.bnr_widgets:
-        widget.cleanup()
+        w = bpy.types.Scene.bnr_widgets[widget]
+        print(w)
+        if w:
+            w.cleanup()
         
     for c in bnr_class_list:
         bpy.utils.unregister_class(c)
