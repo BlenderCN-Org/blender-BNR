@@ -16,12 +16,12 @@ bip_toe_R
 bip_collar_L
 bip_upperArm_L
 bip_lowerArm_L
-hlp_forearm_L
+blp_forearm_L
 bip_hand_L
 bip_collar_R
 bip_upperArm_R
 bip_lowerArm_R
-hlp_forearm_R
+blp_forearm_R
 bip_hand_R
 bip_thumb_0_L
 bip_thumb_1_L
