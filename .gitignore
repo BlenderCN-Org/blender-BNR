@@ -39,3 +39,4 @@ Thumbs.db
 # Program generated files #
 ###########################
 .vscode
+*.pyc
