@@ -11,18 +11,20 @@ bl_info = {
     "category": "Rigging",
     }
 
+##TODO: Add a way to detect child bone chains by defining which axis it faces via xml
+##      ie. Would make it so you could rename and chain and its children from say "Pelvis" to "Head" Z+, "WristL" X+, and "WristR" X- with one click
+
 import bpy
-import bpy_extras
 import bgl
 import blf
+from bpy_extras import view3d_utils
+from bpy_extras.io_utils import ImportHelper
+from bpy.props import StringProperty, BoolProperty, EnumProperty
+from bpy.types import Operator
 from math import *
-from . import bone_list_loader
 import xml.etree.ElementTree as ET
 
-print("Loading BNR")
-
 def BNR_import_list(context, filepath, opt_clear):
-    
     if opt_clear:
         context.scene.BNR_bone_list.clear()
         bpy.types.Scene.BNR_bone_order.clear()
@@ -33,14 +35,6 @@ def BNR_import_list(context, filepath, opt_clear):
         bpy.types.Scene.BNR_bone_order.append(bone.get('name'))
 
     return {'FINISHED'}
-
-
-# ImportHelper is a helper class, defines filename and
-# invoke() function which calls the file selector.
-from bpy_extras.io_utils import ImportHelper
-from bpy.props import StringProperty, BoolProperty, EnumProperty
-from bpy.types import Operator
-
 
 class BoneRenameImportList(Operator, ImportHelper):
     """Opens a .txt file containing a list of bones separated by new lines"""
@@ -75,40 +69,37 @@ class BoneRenameImportList(Operator, ImportHelper):
     def execute(self, context):
         return BNR_import_list(context, self.filepath, self.opt_clear)
 
-
-def rename_bone(self, context, bone_name):
-    bone = get_selected_bone()
+def rename_bone(bone, bone_name):
+    context = bpy.context
+    #TODO: Clean this
     if bone:
-        if context.scene.BNR_replaceDuplicate == True:
+        if context.scene.BNR_replaceDuplicate:
             duplicate_bone = None
             for b in context.object.data.bones:
                 if b.name == bone_name:
                     duplicate_bone = b
                     break
-            if duplicate_bone and bone.name != duplicate_bone.name:
+            if duplicate_bone:
                 duplicate_bone.name = bone_name + ".replaced"
                 bone.name = bone_name
             else:
                 bone.name = bone_name
         else:
             bone.name = bone_name
-                
-        next_bone = get_next_bone()
-        if next_bone and context.scene.BNR_followChainBool == True:
-            bone.select = False
-            next_bone.select = True
+    else:
+        print("BNR::__init__::rename_bone: Could not rename bone, must've been None Type")
 
+#Function to always get data.bone regardless if in pose or edit mode
 def get_selected_bone():
     context = bpy.context
-    selected_bones = context.selected_bones    
-    if selected_bones is not None:
-        if len(selected_bones) > 0:
-            return selected_bones[0]
+    arm = context.object.data
+    selected_edit_bones = context.selected_bones    
+    if selected_edit_bones is not None:
+        return selected_edit_bones[0]
 
-    selected_pose_bones = bpy.context.selected_pose_bones
+    selected_pose_bones = context.selected_pose_bones
     if selected_pose_bones is not None:
-        if len(selected_pose_bones) > 0:
-            return context.object.data.bones[selected_pose_bones[0].name]
+        return arm.bones[selected_pose_bones[0].name]
 
     return None
 
@@ -151,10 +142,18 @@ class BNR_RenameBone(bpy.types.Operator):
     bone_name = bpy.props.StringProperty(name="Bone")
     
     def execute(self, context):
+        #Save mode and switch to edit mode
+        #TODO: Get rid of hacky switching to edit mode and read directly from data.bones at all times
         current_mode = bpy.context.object.mode
         bpy.ops.object.mode_set(mode="EDIT")
         
-        rename_bone(self, context, self.bone_name)
+        rename_bone(get_selected_bone(), self.bone_name)
+
+        #Goto next bone
+        next_bone = get_next_bone()
+        if next_bone and context.scene.BNR_followChainBool == True:
+            get_selected_bone().select = False
+            next_bone.select = True
         
         bpy.ops.object.mode_set(mode=current_mode)
         return {"FINISHED"}
@@ -165,7 +164,7 @@ class BNR_RenameBoneConfirmOperator(bpy.types.Operator):
     bl_label = "Rename Bone"
     bl_options = {"UNDO"}
     
-    type = bpy.props.StringProperty(default="", options={'SKIP_SAVE'})
+    type = StringProperty(default="", options={'SKIP_SAVE'})
     #bpy.types.Scene.BNR_addBoneString = bpy.props.StringProperty(default="Bone")
     
     @classmethod
@@ -173,18 +172,18 @@ class BNR_RenameBoneConfirmOperator(bpy.types.Operator):
         return True
     
     def execute(self, context):
-        rename_bone(self, context, self.type)
+        rename_bone(get_selected_bone(), self.type)
         return {'FINISHED'}
     
     def invoke(self, context, event):
         bone = get_selected_bone()
         if bone:
-            bone_name = bone.name
+            self.bone_name = bone.name
             return context.window_manager.invoke_props_dialog(self, width=400)
         
     def draw(self, context):
         self.layout.prop(self, "type", text="")
-    
+#TODO: Add bone selecting pie menu if pie option is enabled
 class BNR_RenameChain(bpy.types.Operator):
     """Rename a chain of bones up to when the chain forks based on bone list structure"""
     bl_idname = "bnr.rename_chain"
@@ -193,43 +192,79 @@ class BNR_RenameChain(bpy.types.Operator):
     
     ##TODO: Add "replace old" check and replace old if true
     def execute(self, context):
+        #Store current object mode
         current_mode = bpy.context.object.mode
         bpy.ops.object.mode_set(mode="EDIT")
         
         bones = context.selected_bones
         if bones:
-            if len(bones) > 0:
+            #TODO: Rename chain FROM TO selected bones
+            if len(bones) == 2:
                 index = -1
                 cur_bone = bones[0]
+                #Find index of bone name to start at
                 for count in range(0, len(context.scene.BNR_bone_order)):
                     bone_list_name = context.scene.BNR_bone_order[count]
                     if cur_bone.name == bone_list_name:
-                        print("Matching bone found")
+                        index = count
+                        break
+                if index < 0:
+                    bpy.ops.object.mode_set(mode=current_mode)
+                    return {"CANCELLED"}
+                #Get count of bone chain from second bone parent > parent > etc.
+                tmp_bone = bones[1]
+                rename_list = []
+                found = False
+                while found == False and len(rename_list) < 1024 and tmp_bone.parent != None:
+                    rename_list.append(tmp_bone)
+                    tmp_bone = tmp_bone.parent
+                    if cur_bone.name == tmp_bone.name:
+                        found = True
+
+                if found == False:
+                    #TODO: Add exception here for user
+                    print("Selected bone 2 is not in a child chain of selected bone 1")
+                    bpy.ops.object.mode_set(mode=current_mode)
+                    return {"CANCELLED"}
+                count = 1
+                rename_list.reverse()
+                for b in rename_list:
+                    rename_bone(b, context.scene.BNR_bone_order[index + count])
+                    count +=1
+            #Rename bone chain from to first child split/not found
+            elif len(bones) == 1:
+                index = -1
+                cur_bone = bones[0]
+                #Find index of bone name to start at
+                for count in range(0, len(context.scene.BNR_bone_order)):
+                    bone_list_name = context.scene.BNR_bone_order[count]
+                    if cur_bone.name == bone_list_name:
                         index = count
                         break
                 if index > -1:
                     count = 1
+                    #Check for no children, or if children branch out
                     if len(cur_bone.children) == 1:
                         bones = cur_bone
+                        #Same as above, but looping until that condition is met / goes above length of bone list names
                         while len(bones.children) == 1 and index + count < len(context.scene.BNR_bone_order):
+                            #Select next bone in chain
                             bones = bones.children[0]
                             bones.select = False
-                            print("{0}/{1}".format(index + count, len(context.scene.BNR_bone_order) - 1))
-                            print(bones.name)
-                            bones.name = context.scene.BNR_bone_order[index + count]
+                            #Rename bone
+                            rename_bone(bones, context.scene.BNR_bone_order[index + count])
                             count += 1
-                            
+                        #Select last bone and de-select first in chain
                         if context.scene.BNR_followChainBool:
                             cur_bone.select = False
                             bones.select = True
-                            
-            elif len(bones) > 1:
-                print("test")
+                
                 
         bpy.ops.object.mode_set(mode=current_mode)
         return {"FINISHED"}
               
 #### PIE NEXT IN CHAIN SELECTOR ######
+
 class BNR_PieChainMenu(bpy.types.Operator):
 
     bl_idname = "bnr.pie_chain_menu"
@@ -330,7 +365,7 @@ def bnr_draw_names_callback():
                 else:
                     pos = bpy.context.object.location + b.head_local + ((b.tail_local - b.head_local) / 2)
                 ##Translate 3d position to 2d position on viewport
-                pos = bpy_extras.view3d_utils.location_3d_to_region_2d(
+                pos = view3d_utils.location_3d_to_region_2d(
                         bpy.context.region, 
                         bpy.context.space_data.region_3d, 
                         pos, 
@@ -370,7 +405,7 @@ def bnr_draw_names_callback():
 
         
         ##Translate 3d position to 2d position on viewport
-        pos = bpy_extras.view3d_utils.location_3d_to_region_2d(
+        pos = view3d_utils.location_3d_to_region_2d(
                 bpy.context.region, 
                 bpy.context.space_data.region_3d, 
                 pos, 
@@ -379,8 +414,6 @@ def bnr_draw_names_callback():
 
         ##Draw text                
         if b.name == bone.name:
-            #outline
-            
             #fill
             draw_text_outline_3d(font_id, 
                                  selected_color, 
@@ -455,26 +488,27 @@ def bnr_draw_names(self, context):
 
 #"Bone Name Rangler" panel class, the gui
 class BonePanel(bpy.types.Panel):
-    bl_idname = "DATA_PT_bone_rangler"
-    bl_label = "Bone Name Rangler"
-    bl_space_type = 'VIEW_3D'
+    bl_idname      = "DATA_PT_bone_rangler"
+    bl_label       = "Bone Name Rangler"
+    bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_context = "data"
-    bpy.types.Scene.BNR_addBoneString = bpy.props.StringProperty(default="Bone")
-    bpy.types.Scene.BNR_followChainBool = bpy.props.BoolProperty(default=True)
-    bpy.types.Scene.BNR_hideMatching = bpy.props.BoolProperty(default=True)
-    bpy.types.Scene.BNR_replaceDuplicate = bpy.props.BoolProperty(default=False)
-    bpy.types.Scene.BNR_drawNames = bpy.props.BoolProperty(default=False, update=bnr_draw_names)
+    bl_context     = "data"
+    bpy.types.Scene.BNR_addBoneString    = StringProperty(default="Bone")
+    bpy.types.Scene.BNR_followChainBool  = BoolProperty(default=True)
+    bpy.types.Scene.BNR_hideMatching     = BoolProperty(default=True)
+    bpy.types.Scene.BNR_replaceDuplicate = BoolProperty(default=False)
+    bpy.types.Scene.BNR_drawNames        = BoolProperty(default=False, update=bnr_draw_names)
     bpy.types.Scene.BNR_bone_list = {}
     bpy.types.Scene.BNR_bone_order = []
-        
+    
+    #TODO: Clean up names used for layout here
     def draw(self, context):
         if context.object == None:
             return
         if context.object.mode in { 'POSE', 'EDIT' }:
             layout = self.layout
             
-            ##TEMP
+            ######TEMP#####
             layout.operator("wm.call_menu_pie", "BNR_piechain_template").name = "BNR_piechain_template"
             ###############
             
@@ -597,7 +631,10 @@ bnr_class_list = [
 
 addon_keymaps = []
 
-def register():     
+def register():
+    print("Registering BNR")
+
+    ##Check for keymaps
     wm = bpy.context.window_manager  
     km = wm.keyconfigs.addon.keymaps.new(name='Bone Name Rangler', space_type='EMPTY')
     
