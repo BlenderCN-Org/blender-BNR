@@ -119,7 +119,7 @@ def get_next_bone():
     if next_bone:
         return next_bone[0]
     return None
-     
+
 class BNR_AddBoneName(bpy.types.Operator):
     """Add a name to the bone list below"""
     bl_idname = "bone_rename.addname"
@@ -154,12 +154,18 @@ class BNR_Connect(bpy.types.Operator):
         first_bone = get_selected_bone()
         if first_bone == None:
             return False
+        elif len(first_bone.children) > 0:
+            if first_bone.children[0].use_connect == False:
+                return True
 
         second_bone = get_selected_bone(1)
         if second_bone == None:
             return False
 
         if second_bone.parent != first_bone:
+            return False
+
+        if second_bone.use_connect:
             return False
         return True
 
@@ -168,13 +174,18 @@ class BNR_Connect(bpy.types.Operator):
         #   NOTE: Set object to edit mode or else edit_bones list aren't built?
         current_mode = bpy.context.object.mode
         bpy.ops.object.mode_set(mode="EDIT")
-
-        #Move bone tail to child bone head
+        #Get bones
         bone = context.object.data.edit_bones[get_selected_bone().name]
-        child_bone = context.object.data.edit_bones[get_selected_bone(1).name]
+        #Test if second bone is selected or not and make adjustments
+        child_bone = get_selected_bone(1)
+        if child_bone == None:
+            child_bone = bone.children[0]
+        else:
+            #Get edit_bone
+            child_bone = context.object.data.edit_bones[child_bone.name]
+        #Move bone tail to child bone head
         bone.tail = child_bone.head
         child_bone.use_connect = True
-
         #Change mode back
         bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
