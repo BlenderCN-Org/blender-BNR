@@ -13,17 +13,21 @@ bl_info = {
 
 ##TODO: Add a way to detect child bone chains by defining which axis it faces via xml
 ##      ie. Would make it so you could rename and chain and its children from say "Pelvis" to "Head" Z+, "WristL" X+, and "WristR" X- with one click
+##TODO: Add a preset selector, instead of importing every time. Importing should add to presets.
+##TODO: Make the bone list editing better, user shouldn't have to manually construct xml
+##TODO: Connect parent to child
 
-import bpy
+#pylint: disable=import-error
+import bpy 
 import bgl
 import blf
 from bpy_extras import view3d_utils
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Operator
+#pylint: enable=import-error
 from math import *
 import xml.etree.ElementTree as ET
-
 def BNR_import_list(context, filepath, opt_clear):
     if opt_clear:
         context.scene.BNR_bone_list.clear()
@@ -90,16 +94,17 @@ def rename_bone(bone, bone_name):
         print("BNR::__init__::rename_bone: Could not rename bone, must've been None Type")
 
 #Function to always get data.bone regardless if in pose or edit mode
-def get_selected_bone():
+def get_selected_bone(index=1):
+    index = index - 1
     context = bpy.context
     arm = context.object.data
     selected_edit_bones = context.selected_bones    
     if selected_edit_bones is not None:
-        return selected_edit_bones[0]
+        return selected_edit_bones[index]
 
     selected_pose_bones = context.selected_pose_bones
     if selected_pose_bones is not None:
-        return arm.bones[selected_pose_bones[0].name]
+        return arm.bones[selected_pose_bones[index].name]
 
     return None
 
@@ -110,7 +115,16 @@ def get_next_bone():
         return next_bone[0]
     return None
      
-     
+class BNR_AddBoneName(bpy.types.Operator):
+    """Add a name to the bone list below"""
+    bl_idname = "bone_rename.addname"
+    bl_label = "Add Bone Name"
+    
+    def execute(self, context):
+        print("self.user_inputted_value:", context.scene.BNR_addBoneString)
+        bpy.types.Scene.BNR_bone_list.append(context.scene.BNR_addBoneString)
+        return {"FINISHED"}
+
 class BNR_ClearList(bpy.types.Operator):
     """Clears the bone list"""
     bl_idname = "bone_rename.clearlist"
@@ -123,15 +137,64 @@ class BNR_ClearList(bpy.types.Operator):
         context.scene.BNR_bone_order.clear()
         return {"FINISHED"}
 
-class BNR_AddBoneName(bpy.types.Operator):
-    """Add a name to the bone list below"""
-    bl_idname = "bone_rename.addname"
-    bl_label = "Add Bone Name"
-    
+class BNR_Connect(bpy.types.Operator):
+    """Moves tail end of parent bone to a child bone's head"""
+    bl_idname = "bnr.connect"
+    bl_label = "Connect"
+    bl_icon = "CONSTRAINT_BONE"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(self, context):
+        if get_selected_bone() == None:
+            return False
+        if get_selected_bone(2) == None:
+            return False
+        return True
+
     def execute(self, context):
-        print("self.user_inputted_value:", context.scene.BNR_addBoneString)
-        bpy.types.Scene.BNR_bone_list.append(context.scene.BNR_addBoneString)
-        return {"FINISHED"}
+        #TODO: Add pie chain selecting
+        bone = context.object.data.edit_bones[get_selected_bone().name]
+        child_bone = context.object.data.edit_bones[get_selected_bone(2).name]
+        bone.tail = child_bone.head
+        child_bone.use_connect = True
+
+######### PIE CHILD SELECTOR ###########
+class BNR_PieChainMenu(bpy.types.Operator):
+
+    bl_idname = "bnr.pie_chain_menu"
+    bl_label = "Add Quick Node"
+    
+    bone_name = bpy.props.StringProperty()
+    @classmethod
+    def poll(cls, context):
+        if get_selected_bone():
+            return True
+        return False
+        
+    def execute(self, context):
+        #TODO: Optimize this, and getting current bone
+        context.object.data.bones[get_selected_bone().name].select = False
+        context.object.data.bones[self.bone_name].select = True
+        return {'FINISHED'}
+    
+class BNR_piechain_template(bpy.types.Menu):
+    # label is displayed at the center of the pie menu.
+    bl_label = "Select Bone"
+    
+    @classmethod
+    def poll(cls, context):
+        if get_selected_bone():
+            return True
+        return False
+    
+    def draw(self, context):
+        layout = self.layout
+        pie = layout.menu_pie()        
+        bones = get_selected_bone().children
+        for b in bones:
+            pie.operator("bnr.pie_chain_menu", b.name).bone_name = b.name
+########################################
 
 class BNR_RenameBone(bpy.types.Operator):
     """Rename bone to current button's name"""
@@ -262,44 +325,6 @@ class BNR_RenameChain(bpy.types.Operator):
                 
         bpy.ops.object.mode_set(mode=current_mode)
         return {"FINISHED"}
-              
-#### PIE NEXT IN CHAIN SELECTOR ######
-
-class BNR_PieChainMenu(bpy.types.Operator):
-
-    bl_idname = "bnr.pie_chain_menu"
-    bl_label = "Add Quick Node"
-    
-    bone_name = bpy.props.StringProperty()
-    @classmethod
-    def poll(cls, context):
-        if get_selected_bone():
-            return True
-        return False
-        
-    def execute(self, context):
-        #TODO: Optimize this, and getting current bone
-        context.object.data.bones[get_selected_bone().name].select = False
-        context.object.data.bones[self.bone_name].select = True
-        return {'FINISHED'}
-    
-class BNR_piechain_template(bpy.types.Menu):
-    # label is displayed at the center of the pie menu.
-    bl_label = "Select Bone"
-    
-    @classmethod
-    def poll(cls, context):
-        if get_selected_bone():
-            return True
-        return False
-    
-    def draw(self, context):
-        layout = self.layout
-        pie = layout.menu_pie()        
-        bones = get_selected_bone().children
-        for b in bones:
-            pie.operator("bnr.pie_chain_menu", b.name).bone_name = b.name
-########################################
 
 ###############DRAWING NAMES#################
 def draw_text_3d(font_id, color, pos, width, height, msg):
@@ -512,6 +537,8 @@ class BonePanel(bpy.types.Panel):
             layout.operator("wm.call_menu_pie", "BNR_piechain_template").name = "BNR_piechain_template"
             ###############
             
+            layout.operator("bnr.connect", "Connect")
+
             bone = get_selected_bone()
             if bone is not None:
                 layout.prop(bone, "name", "", icon="BONE_DATA")
@@ -620,6 +647,7 @@ class BonePanel(bpy.types.Panel):
 bnr_class_list = [
     BNR_RenameChain,
     BNR_ClearList,
+    BNR_Connect,
     BoneRenameImportList,
     BNR_RenameBone,
     BNR_RenameBoneConfirmOperator,
