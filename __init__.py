@@ -94,16 +94,21 @@ def rename_bone(bone, bone_name):
         print("BNR::__init__::rename_bone: Could not rename bone, must've been None Type")
 
 #Function to always get data.bone regardless if in pose or edit mode
-def get_selected_bone(index=1):
-    index = index - 1
+def get_selected_bone(index=0):
+    #TODO: Fix this hack
+    ##  Bone should be returned depending on object.mode instead of 
     context = bpy.context
     arm = context.object.data
     selected_edit_bones = context.selected_bones    
     if selected_edit_bones is not None:
+        if index >= len(selected_edit_bones):
+            return None
         return selected_edit_bones[index]
 
     selected_pose_bones = context.selected_pose_bones
     if selected_pose_bones is not None:
+        if index >= len(selected_pose_bones):
+            return None
         return arm.bones[selected_pose_bones[index].name]
 
     return None
@@ -146,18 +151,33 @@ class BNR_Connect(bpy.types.Operator):
 
     @classmethod
     def poll(self, context):
-        if get_selected_bone() == None:
+        first_bone = get_selected_bone()
+        if first_bone == None:
             return False
-        if get_selected_bone(2) == None:
+
+        second_bone = get_selected_bone(1)
+        if second_bone == None:
+            return False
+
+        if second_bone.parent != first_bone:
             return False
         return True
 
     def execute(self, context):
         #TODO: Add pie chain selecting
+        #   NOTE: Set object to edit mode or else edit_bones list aren't built?
+        current_mode = bpy.context.object.mode
+        bpy.ops.object.mode_set(mode="EDIT")
+
+        #Move bone tail to child bone head
         bone = context.object.data.edit_bones[get_selected_bone().name]
-        child_bone = context.object.data.edit_bones[get_selected_bone(2).name]
+        child_bone = context.object.data.edit_bones[get_selected_bone(1).name]
         bone.tail = child_bone.head
         child_bone.use_connect = True
+
+        #Change mode back
+        bpy.ops.object.mode_set(mode=current_mode)
+        return {'FINISHED'}
 
 ######### PIE CHILD SELECTOR ###########
 class BNR_PieChainMenu(bpy.types.Operator):
@@ -537,7 +557,7 @@ class BonePanel(bpy.types.Panel):
             layout.operator("wm.call_menu_pie", "BNR_piechain_template").name = "BNR_piechain_template"
             ###############
             
-            layout.operator("bnr.connect", "Connect")
+            layout.operator("bnr.connect", "Connect (Tail > Head)")
 
             bone = get_selected_bone()
             if bone is not None:
