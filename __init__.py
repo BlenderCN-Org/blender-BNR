@@ -186,6 +186,10 @@ class BNR_Connect(bpy.types.Operator):
         #Move bone tail to child bone head
         bone.tail = child_bone.head
         child_bone.use_connect = True
+
+        if context.scene.BNR_followChainBool:
+            bone.select = False
+            child_bone.select = True
         #Change mode back
         bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
