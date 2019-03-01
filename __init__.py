@@ -186,7 +186,7 @@ class BNR_Connect(bpy.types.Operator):
         #Move bone tail to child bone head
         bone.tail = child_bone.head
         child_bone.use_connect = True
-
+        #Select next bone in chain if option set to true
         if context.scene.BNR_followChainBool:
             bone.select = False
             child_bone.select = True
@@ -239,9 +239,20 @@ class BNR_RenameBone(bpy.types.Operator):
     
     bone_name = bpy.props.StringProperty(name="Bone")
     
+    @classmethod
+    def poll(self, context):
+        if get_selected_bone() == None:
+            return False
+        if context.object.mode == "EDIT":
+            if len(context.selected_bones) > 1:
+                return False
+        if context.object.mode == "POSE":
+            if len(context.selected_pose_bones) > 1:
+                return False
+        return True
+
     def execute(self, context):
         #Save mode and switch to edit mode
-        #TODO: Get rid of hacky switching to edit mode and read directly from data.bones at all times
         current_mode = bpy.context.object.mode
         bpy.ops.object.mode_set(mode="EDIT")
         
@@ -288,6 +299,26 @@ class BNR_RenameChain(bpy.types.Operator):
     bl_label = "Rename Chain"
     bl_options = {"UNDO"}
     
+    @classmethod
+    def poll(self, context):
+        #Check if first and second bone are selected, if second is not, then check if first bone has children
+        first_bone = get_selected_bone()
+        if first_bone == None:
+            return False
+        second_bone = get_selected_bone(1)
+        if second_bone == None:
+            if len(first_bone.children) < 1:
+                return False
+        #Length of selected bones
+        if context.object.mode == "EDIT":
+            if len(context.selected_bones) > 2:
+                return False
+        if context.object.mode == "POSE":
+            if len(context.selected_pose_bones) > 2:
+                return False
+
+        return True
+        
     ##TODO: Add "replace old" check and replace old if true
     def execute(self, context):
         #Store current object mode
@@ -647,11 +678,13 @@ class BonePanel(bpy.types.Panel):
                 bone_count = 0
                 
                 child_names = []
-                for child in bone.children:
-                    child_names.append(child.name)    
                 parent_name = None
-                if bone.parent:
-                    parent_name = bone.parent.name
+                #Check if bone even selected to get children/parent
+                if bone:
+                    for child in bone.children:
+                        child_names.append(child.name)    
+                    if bone.parent:
+                        parent_name = bone.parent.name
                 
                 ##Iterate over BNR list and do shit to figure out what to add to list in that moment
                 for b in bpy.types.Scene.BNR_bone_order:
