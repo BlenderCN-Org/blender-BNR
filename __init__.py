@@ -626,20 +626,12 @@ class BonePanel(bpy.types.Panel):
             add_name_row.operator("bone_rename.addname", "Add Name")
             
             layout.operator("bone_rename.import_list", icon="FILE")
-            option_col = layout.column(align=True)
             #endregion  #/ Bone List Manipulation /#
-            #region     #/ Connect Stuff /#
-            layout.operator("bnr.connect", "Connect (Tail > Head)")
-            ##
-            connect_row = layout.row()
-            t = connect_row.column()
-            t.prop(context.scene, "BNR_recalculateRoll", "Calculate Roll")
-            #endregion  #/ Connect Stuff /#
             #region     #/ Armature Options /#
+            option_col = layout.column(align=True)
             t = option_col.row()
             t.alignment = "CENTER"
             t.label("Armature Options")
-            
             option_armature_col = option_col.column()
             #LAYERS
             t = option_armature_col.column()
@@ -669,6 +661,14 @@ class BonePanel(bpy.types.Panel):
             bl_col = layout.column()
             bl_inner_col = bl_col.column()
             #endregion  #/ BNR Options #/
+            #region     #/ Connect Stuff /#
+            
+            layout.operator("bnr.connect", "Connect (Tail > Head)")
+            ##
+            connect_row = layout.row()
+            t = connect_row.column()
+            t.prop(context.scene, "BNR_recalculateRoll", "Calculate Roll")
+            #endregion  #/ Connect Stuff /#
             #region     #/ Bone List /#
             if len(bpy.types.Scene.BNR_bone_order) > 0:
                 
