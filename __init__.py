@@ -15,7 +15,6 @@ bl_info = {
 ##      ie. Would make it so you could rename and chain and its children from say "Pelvis" to "Head" Z+, "WristL" X+, and "WristR" X- with one click
 ##TODO: Add a preset selector, instead of importing every time. Importing should add to presets.
 ##TODO: Make the bone list editing better, user shouldn't have to manually construct xml
-##TODO: Connect parent to child
 
 #pylint: disable=import-error
 import bpy 
@@ -93,7 +92,6 @@ def rename_bone(bone, bone_name):
     else:
         print("BNR::__init__::rename_bone: Could not rename bone, must've been None Type")
 
-#Function to always get data.bone regardless if in pose or edit mode
 def get_selected_bone(index=0):
     #TODO: Fix this hack
     ##  Bone should be returned depending on object.mode instead of 
@@ -765,4 +763,3 @@ def unregister():
         
 if __name__ == "__main__":
     register()   
-    
