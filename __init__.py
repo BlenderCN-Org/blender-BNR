@@ -184,6 +184,18 @@ class BNR_Connect(bpy.types.Operator):
         #Move bone tail to child bone head
         bone.tail = child_bone.head
         child_bone.use_connect = True
+        #Recalculate bone roll
+        if context.scene.BNR_recalculateRoll:
+            #Get axis direction to recalculate
+            direction = ""
+            #X+
+            if bone.head[0] < child_bone.head[0]:
+                direction = "GLOBAL_POS_X"
+            #X-
+            if bone.head[0] < child_bone.head[0]:
+                direction = "GLOBAL_NEG_X"
+            #Execute recalculate
+            bpy.ops.armature.calculate_roll(type=direction)
         #Select next bone in chain if option set to true
         if context.scene.BNR_followChainBool:
             bone.select = False
@@ -587,6 +599,7 @@ class BonePanel(bpy.types.Panel):
     bpy.types.Scene.BNR_hideMatching     = BoolProperty(default=True)
     bpy.types.Scene.BNR_replaceDuplicate = BoolProperty(default=False)
     bpy.types.Scene.BNR_drawNames        = BoolProperty(default=False, update=bnr_draw_names)
+    bpy.types.Scene.BNR_recalculateRoll  = BoolProperty(default=True)
     bpy.types.Scene.BNR_bone_list = {}
     bpy.types.Scene.BNR_bone_order = []
     
@@ -596,14 +609,12 @@ class BonePanel(bpy.types.Panel):
             return
         if context.object.mode in { 'POSE', 'EDIT' }:
             layout = self.layout
-            
-            ######TEMP#####
-            layout.operator("wm.call_menu_pie", "BNR_piechain_template").name = "BNR_piechain_template"
-            ###############
-            
-            layout.operator("bnr.connect", "Connect (Tail > Head)")
-
             bone = get_selected_bone()
+
+            #region     #/ TEMP /#
+            layout.operator("wm.call_menu_pie", "BNR_piechain_template").name = "BNR_piechain_template"
+            #endregion  #/ TEMP /#
+            #region     #/ Bone List Manipulation /#
             if bone is not None:
                 layout.prop(bone, "name", "", icon="BONE_DATA")
             else:
@@ -616,8 +627,15 @@ class BonePanel(bpy.types.Panel):
             
             layout.operator("bone_rename.import_list", icon="FILE")
             option_col = layout.column(align=True)
-
-            ##############/ Armature Options /#################
+            #endregion  #/ Bone List Manipulation /#
+            #region     #/ Connect Stuff /#
+            layout.operator("bnr.connect", "Connect (Tail > Head)")
+            ##
+            connect_row = layout.row()
+            t = connect_row.column()
+            t.prop(context.scene, "BNR_recalculateRoll", "Calculate Roll")
+            #endregion  #/ Connect Stuff /#
+            #region     #/ Armature Options /#
             t = option_col.row()
             t.alignment = "CENTER"
             t.label("Armature Options")
@@ -634,7 +652,8 @@ class BonePanel(bpy.types.Panel):
             #RIGHT
             t = option_armature_row.column()
             t.prop(context.object, "show_x_ray")            
-            ##############/   BNR Options   /#################
+            #endregion  #/ Armature Options /#
+            #region     #/ BNR Options #/
             t = option_col.row()
             t.alignment = "CENTER"
             t.label("Bone Name Replacement Options")
@@ -649,9 +668,8 @@ class BonePanel(bpy.types.Panel):
             
             bl_col = layout.column()
             bl_inner_col = bl_col.column()
-            
-            #############/ Bone List /#############
-
+            #endregion  #/ BNR Options #/
+            #region     #/ Bone List /#
             if len(bpy.types.Scene.BNR_bone_order) > 0:
                 
                 t = option_col.row()
@@ -709,6 +727,7 @@ class BonePanel(bpy.types.Panel):
                     bone_count += 1
                 if context.scene.BNR_hideMatching == True:
                     bl_inner_col.label("({0}/{1} Hidden due to matching)".format(hidden_count, bone_count))
+            #endregion  #/ Bone List /#
 
 bnr_class_list = [
     BNR_RenameChain,
