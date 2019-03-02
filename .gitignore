@@ -33,6 +33,7 @@
 ._*
 .Spotlight-V100
 .Trashes
+.fuse*
 ehthumbs.db
 Thumbs.db
 
