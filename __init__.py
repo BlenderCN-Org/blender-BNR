@@ -27,6 +27,28 @@ from bpy.types import Operator
 #pylint: enable=import-error
 from math import *
 import xml.etree.ElementTree as ET
+
+import os
+xml_preset_path = os.path.join(bpy.utils.script_paths()[2], "presets", "blender-BNR")
+
+def xml_preset_load(self, context):
+    opt = bpy.context.scene.bnr_xml_list_enum
+    print(opt)
+    if opt == "CLEAR":
+        context.scene.BNR_bone_list.clear()
+        bpy.types.Scene.BNR_bone_order.clear()
+    else:
+        BNR_import_list(context, os.path.join(xml_preset_path, opt), True)
+
+def rebuild_xml_presets():
+    tmp = [("CLEAR", "Clear", "")]
+    for f in os.listdir(xml_preset_path):
+        print(f)
+        tmp.append(
+            (f, f, '')
+        )
+    bpy.types.Scene.bnr_xml_list_enum = EnumProperty(items=tmp, name="Select Preset", default="CLEAR", update=xml_preset_load)
+
 def BNR_import_list(context, filepath, opt_clear):
     if opt_clear:
         context.scene.BNR_bone_list.clear()
@@ -41,8 +63,9 @@ def BNR_import_list(context, filepath, opt_clear):
 
 class BoneRenameImportList(Operator, ImportHelper):
     """Opens a .txt file containing a list of bones separated by new lines"""
-    bl_idname = "bone_rename.import_list" 
+    bl_idname = "bnr.import_list" 
     bl_label = "Import Bone List"
+    bl_options = {'PRESET'}
 
     # ImportHelper mixin class uses this
     filename_ext = ".xml"
@@ -118,6 +141,7 @@ def get_next_bone():
         return next_bone[0]
     return None
 
+##TODO: FIX THIS
 class BNR_AddBoneName(bpy.types.Operator):
     """Add a name to the bone list below"""
     bl_idname = "bone_rename.addname"
@@ -564,7 +588,7 @@ def bnr_draw_names_callback():
                                  b.name
             )
 
-bpy.types.Scene.bnr_widgets = {}    
+bpy.types.Scene.bnr_widgets = {}
 
 ##Non-Registered class
 class BNR_DrawNames:
@@ -619,13 +643,17 @@ class BonePanel(bpy.types.Panel):
                 layout.prop(bone, "name", "", icon="BONE_DATA")
             else:
                 layout.label("No bone selected")            
-            
+
+            ##TODO:// Fix adding bones
+            """
             add_name_row = layout.row()
             add_name_row.prop(context.scene, "BNR_addBoneString", "")
             add_name_row.alignment = "RIGHT"
             add_name_row.operator("bone_rename.addname", "Add Name")
-            
-            layout.operator("bone_rename.import_list", icon="FILE")
+            """
+            t = layout.row(align=True)
+            t.prop_menu_enum(context.scene, 'bnr_xml_list_enum', text=context.scene.bnr_xml_list_enum)
+            t.operator("bnr.import_list", icon="FILE", text="")
             #endregion  #/ Bone List Manipulation /#
             #region     #/ Armature Options /#
             option_col = layout.column(align=True)
@@ -663,9 +691,9 @@ class BonePanel(bpy.types.Panel):
             #endregion  #/ BNR Options #/
             #region     #/ Connect Stuff /#
             
-            layout.operator("bnr.connect", "Connect (Tail > Head)")
+            option_col.operator("bnr.connect", "Connect (Tail > Head)")
             ##
-            connect_row = layout.row()
+            connect_row = option_col.row()
             t = connect_row.column()
             t.prop(context.scene, "BNR_recalculateRoll", "Calculate Roll")
             #endregion  #/ Connect Stuff /#
@@ -746,8 +774,15 @@ addon_keymaps = []
 
 def register():
     print("Registering BNR")
-
+    
+    if not os.path.exists(xml_preset_path):
+        os.mkdir(xml_preset_path)
+    files = os.listdir(xml_preset_path)
+    bpy.types.Scene.bnr_xml_list = files
+    print(bpy.types.Scene.bnr_xml_list)
+    rebuild_xml_presets()
     ##Check for keymaps
+    """
     wm = bpy.context.window_manager  
     km = wm.keyconfigs.addon.keymaps.new(name='Bone Name Rangler', space_type='EMPTY')
     
@@ -760,7 +795,7 @@ def register():
                               oskey=False
     )
     addon_keymaps.append((km, kmi))
-    
+    """
     #bpy.data.window_managers[0].keyconfigs.active.keymaps['Pose'].keymap_items.new('bnr.rename_panel',value='PRESS',type='E',ctrl=True,alt=False,shift=False,oskey=False)     
     for c in bnr_class_list:
         bpy.utils.register_class(c)
@@ -779,6 +814,7 @@ def unregister():
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
+    del bpy.types.Scene.bnr_xml_list_enum
         
 if __name__ == "__main__":
     register()   
