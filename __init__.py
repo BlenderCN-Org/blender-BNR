@@ -29,7 +29,6 @@ from math import *
 import xml.etree.ElementTree as ET
 
 import os
-import sys
 
 from . import quick_ik
 from .quick_ik import qik_class_list
