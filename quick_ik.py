@@ -7,6 +7,7 @@ import bpy
 from bpy.types import Panel, Operator
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty, IntProperty
 from bpy_extras.object_utils import AddObjectHelper
+import bmesh
 #pylint: enable=import-error
 
 symmetry_map = {
@@ -15,6 +16,54 @@ symmetry_map = {
     "LEFT" : "RIGHT",
     "Left" : "Right"
 }
+def create_widget(name, shape_name="CIRCLE", rotation_offset=[0, 0, 0], size=1.0):
+    scene_collection = bpy.context.scene.collection
+    wgt_col_name = "QIK-WIDGETS"
+    wgt_collection = None
+
+    for c in scene_collection.children:
+        if wgt_col_name == c.name:
+            wgt_collection = c
+    
+    if not wgt_collection:
+        wgt_collection = bpy.data.collections.new(wgt_col_name)
+        scene_collection.children.link(wgt_collection)
+        
+    wgt_obj = None
+
+    if shape_name == "CIRCLE":
+        mesh = bpy.data.meshes.new(name)
+        wgt_obj = bpy.data.objects.new(name, mesh)
+
+        bm = bmesh.new()
+        bmesh.ops.create_circle(
+            bm, 
+            radius=size, 
+            segments=32)
+
+        bm.to_mesh(mesh)
+        bm.free()
+
+        wgt_collection.objects.link(wgt_obj)
+
+    wgt_collection.hide_select = True
+    wgt_collection.hide_render = True
+    wgt_collection.hide_viewport = True
+    
+    return wgt_obj
+
+
+
+def create_bone_group(name="IK", color_set="THEME09"):
+    bone_groups = bpy.context.object.pose.bone_groups
+    for bg in bone_groups:
+        if name == bg.name:
+            return bg
+
+    bg = bone_groups.new(name=name)
+    bg.color_set = color_set
+
+    return bg
 
 def get_symmetrical_name(name):
     base_name = name.split(".")
@@ -41,7 +90,7 @@ def create_simple_limb_ik(self, arm, fk_ik, fk_pt, pole_angle):
     y = fk_ik.head[1]
     z = fk_ik.head[2]
     ikh.head = fk_ik.head
-    ikh.tail = (x, abs(y - fk_ik.tail[1]) + self.ik_size, z)
+    ikh.tail = (x, abs(y - fk_ik.tail[1]/2) * self.ik_size, z)
 
     parent_list = fk_ik.parent_recursive
     par_length = len(parent_list)
@@ -50,7 +99,6 @@ def create_simple_limb_ik(self, arm, fk_ik, fk_pt, pole_angle):
     if self.chain_length > par_length:
         self.chain_length = par_length
 
-    self.pole_target_name = fk_pt.name
     ikp = arm.data.edit_bones.new("IK.PoleTarget." + fk_pt.name)
     x = fk_pt.head[0]
     y = fk_pt.head[1]
@@ -63,9 +111,16 @@ def create_simple_limb_ik(self, arm, fk_ik, fk_pt, pole_angle):
 
     ##POSE MODE STUFF
     bpy.ops.object.mode_set(mode="POSE")
-
+    
+    #Create IK group
+    IK_bone_group = create_bone_group()
+    #Set IK bones to group IK
+    arm.pose.bones[ikh.name].bone_group = IK_bone_group
+    arm.pose.bones[ikp.name].bone_group = IK_bone_group
     fk_ik_pose = arm.pose.bones[fk_ik.name]
-    ## ADD CONSTRAINTS
+
+    #region     /# ADD CONSTRAINTS #/
+    #Inverse Kinematics
     ik_constraint = fk_ik_pose.constraints.new("IK")
     ik_constraint.target = arm
     ik_constraint.subtarget = ikh.name
@@ -74,13 +129,26 @@ def create_simple_limb_ik(self, arm, fk_ik, fk_pt, pole_angle):
     ik_constraint.chain_count = self.chain_length
     ik_constraint.use_tail = self.use_tail
     ik_constraint.pole_angle = pole_angle
-
+    #Copy Rotation
     if self.use_rotation:
         cr_constraint = fk_ik_pose.constraints.new("COPY_ROTATION")
         cr_constraint.target = arm
         cr_constraint.subtarget = ikh.name
         cr_constraint.owner_space = "LOCAL_WITH_PARENT"
         cr_constraint.target_space = "LOCAL"
+    #endregion  /# ADD CONSTRAINTS #/
+
+    #region / ADD CUSTOM SHAPES /
+    ## IK HANDLE
+    pose_bone = arm.pose.bones[ikh.name]
+    widget = create_widget(pose_bone.name)
+    pose_bone.custom_shape = widget
+
+    ## IK POLE TARGET
+    pose_bone = arm.pose.bones[ikp.name]
+    widget = create_widget(pose_bone.name)
+    pose_bone.custom_shape = widget
+    #endregion / ADD CUSTOM SHAPES /
 
     bpy.ops.object.mode_set(mode=cur_mode)
 
@@ -90,7 +158,7 @@ class BNR_QIK_OT_add_simple_ik(Operator, AddObjectHelper):
     bl_label = "Add Simple IK"
     bl_options = { "REGISTER", "UNDO", "PRESET" }
 
-    ik_size : FloatProperty(name="IK Size", default=0.0)
+    ik_size : FloatProperty(name="IK Size", default=1.0)
     chain_length : IntProperty(name="Chain Length", default=2, min=0)
     use_tail : BoolProperty(name="Use Tail", default=False)
     use_rotation : BoolProperty(name="Copy Rotation", default=True)
@@ -119,7 +187,7 @@ class BNR_QIK_OT_add_simple_ik(Operator, AddObjectHelper):
         cur_mode = context.object.mode
         if arm.mode != "EDIT":
             bpy.ops.object.mode_set(mode="EDIT")
-
+        
         fk_bone = context.selected_bones[0]
         parent_list = fk_bone.parent_recursive
         par_length = len(parent_list)
@@ -128,6 +196,7 @@ class BNR_QIK_OT_add_simple_ik(Operator, AddObjectHelper):
         if self.chain_length > par_length:
             self.chain_length = par_length
         fk_secondary = parent_list[self.pole_target]
+        self.pole_target_name = fk_secondary.name
 
         #Set names to variable cus this changes after the function call for some reason
         fk_ik_name = fk_bone.name
@@ -189,7 +258,7 @@ class BNR_QIK_OT_add_simple_ik(Operator, AddObjectHelper):
 #endregion  /# Operators #/
 
 class TOOLS_PT_BNR_Quick_IK(Panel):
-    bl_label       = "BNR Quick IK"
+    bl_label       = "QIK BNR"
     bl_idname      = "TOOLS_PT_BNR_Quick_IK"
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
