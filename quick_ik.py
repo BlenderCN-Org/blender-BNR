@@ -8,7 +8,9 @@ from bpy.types import Panel, Operator
 from bpy.props import StringProperty, BoolProperty, EnumProperty, FloatProperty, IntProperty
 from bpy_extras.object_utils import AddObjectHelper
 import bmesh
+import mathutils
 #pylint: enable=import-error
+import math
 
 symmetry_map = {
     "L" : "R",
@@ -16,6 +18,7 @@ symmetry_map = {
     "LEFT" : "RIGHT",
     "Left" : "Right"
 }
+
 def create_widget(name, shape_name="CIRCLE", rotation_offset=[0, 0, 0], size=1.0):
     scene_collection = bpy.context.scene.collection
     wgt_col_name = "QIK-WIDGETS"
@@ -32,6 +35,7 @@ def create_widget(name, shape_name="CIRCLE", rotation_offset=[0, 0, 0], size=1.0
     wgt_obj = None
 
     if shape_name == "CIRCLE":
+        #region WIDGET_CIRCLE
         mesh = bpy.data.meshes.new(name)
         wgt_obj = bpy.data.objects.new(name, mesh)
 
@@ -43,9 +47,67 @@ def create_widget(name, shape_name="CIRCLE", rotation_offset=[0, 0, 0], size=1.0
 
         bm.to_mesh(mesh)
         bm.free()
+        #endregion WIDGET_CIRCLE
+    elif shape_name == "POLE_TARGET":
+        #region     WIDGET_POLE_TARGET
 
-        wgt_collection.objects.link(wgt_obj)
+        # Make a new BMesh
+        bm = bmesh.new()
 
+        # Add a circle XXX, should return all geometry created, not just verts.
+        bmesh.ops.create_circle(
+            bm,
+            cap_ends=False,
+            radius=1,
+            segments=32)
+            
+        ret = bmesh.ops.duplicate(
+            bm,
+            geom=bm.verts[:] + bm.edges[:] + bm.faces[:])
+        geom_dupe = ret["geom"]
+        verts_dupe = [ele for ele in geom_dupe if isinstance(ele, bmesh.types.BMVert)]
+        del ret
+
+        # position the new link
+        bmesh.ops.rotate(
+            bm,
+            verts=verts_dupe,
+            cent=(0.0, 0.0, 0.0),
+            matrix=mathutils.Matrix.Rotation(math.radians(90.0), 3, 'Y'))
+            
+        ret = bmesh.ops.duplicate(
+            bm,
+            geom=bm.verts[:] + bm.edges[:] + bm.faces[:])
+        geom_dupe = ret["geom"]
+        verts_dupe = [ele for ele in geom_dupe if isinstance(ele, bmesh.types.BMVert)]
+        del ret
+
+        bmesh.ops.rotate(
+            bm,
+            verts=verts_dupe,
+            cent=(0.0, 0.0, 0.0),
+            matrix=mathutils.Matrix.Rotation(math.radians(90.0), 3, 'Y'))
+
+        bmesh.ops.rotate(
+            bm,
+            verts=verts_dupe,
+            cent=(0.0, 0.0, 0.0),
+            matrix=mathutils.Matrix.Rotation(math.radians(90.0), 3, 'Z'))
+
+        bmesh.ops.remove_doubles(
+            bm,
+            verts=bm.verts[:],
+            dist=0.01)
+
+        # Finish up, write the bmesh into a new mesh
+        me = bpy.data.meshes.new("Mesh")
+        bm.to_mesh(me)
+        bm.free()
+
+        wgt_obj = bpy.data.objects.new(name, me)
+        #endregion  WIDGET_POLE_TARGET
+
+    wgt_collection.objects.link(wgt_obj)
     wgt_collection.hide_select = True
     wgt_collection.hide_render = True
     wgt_collection.hide_viewport = True
@@ -146,7 +208,7 @@ def create_simple_limb_ik(self, arm, fk_ik, fk_pt, pole_angle):
 
     ## IK POLE TARGET
     pose_bone = arm.pose.bones[ikp.name]
-    widget = create_widget(pose_bone.name)
+    widget = create_widget(pose_bone.name, shape_name="POLE_TARGET")
     pose_bone.custom_shape = widget
     #endregion / ADD CUSTOM SHAPES /
 
