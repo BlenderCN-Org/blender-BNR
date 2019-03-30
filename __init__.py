@@ -15,9 +15,9 @@ bl_info = {
 ##      ie. Would make it so you could rename and chain and its children from say "Pelvis" to "Head" Z+, "WristL" X+, and "WristR" X- with one click
 ##TODO: Add a preset selector, instead of importing every time. Importing should add to presets.
 ##TODO: Make the bone list editing better, user shouldn't have to manually construct xml
-
+########
 #pylint: disable=import-error
-import bpy 
+import bpy
 import bgl
 import blf
 from bpy_extras import view3d_utils
@@ -29,6 +29,13 @@ from math import *
 import xml.etree.ElementTree as ET
 
 import os
+import sys
+
+from . import quick_ik
+from .quick_ik import qik_class_list
+
+
+
 xml_preset_path = os.path.join(bpy.utils.script_paths()[2], "presets", "blender-BNR")
 
 def xml_preset_load(self, context):
@@ -631,8 +638,6 @@ class TOOLS_PT_BNR_Create(bpy.types.Panel):
         return False
     
     def draw(self, context):
-        if context.object == None:
-            return
         if context.object.mode in { 'POSE', 'EDIT' }:
             layout = self.layout
             bone = get_selected_bone()
@@ -678,7 +683,7 @@ class TOOLS_PT_BNR_Create(bpy.types.Panel):
             #region     #/ BNR Options #/
             t = option_col.row()
             t.alignment = "CENTER"
-            t.label(text="Bone Name Replacement Options")
+            t.label(text="Bone Name Options")
             
             option_row = option_col.row()
             t = option_row.column()
@@ -772,6 +777,8 @@ bnr_class_list = [
     BNR_PG_settings,
     TOOLS_PT_BNR_Create
 ]
+for c in qik_class_list:
+    bnr_class_list.append(c)
 
 addon_keymaps = []
 
@@ -799,6 +806,9 @@ def register():
     )
     addon_keymaps.append((km, kmi))
     """
+    #blend_dir = os.path.basename(bpy.data.filepath)
+    
+
     #bpy.data.window_managers[0].keyconfigs.active.keymaps['Pose'].keymap_items.new('bnr.rename_panel',value='PRESS',type='E',ctrl=True,alt=False,shift=False,oskey=False)     
     for c in bnr_class_list:
         bpy.utils.register_class(c)
