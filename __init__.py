@@ -2,8 +2,8 @@ bl_info = {
     "name": "Bone Name Rangler (BNR)",
     "author": "birdd",
     "version": (0, 0, 1),
-    "blender": (2, 79, 0),
-    "location": "View3D > Properties > Bone Name Rangler",
+    "blender": (2, 80, 0),
+    "location": "View3D > N-Panel > BNR tab",
     "description": "Set of tools for quickly renaming bones.",
     "warning": "",
     "wiki_url": "https://github.com/birddiq/blender-BNR",
@@ -70,7 +70,7 @@ class BoneRenameImportList(Operator, ImportHelper):
     # ImportHelper mixin class uses this
     filename_ext = ".xml"
 
-    filter_glob = StringProperty(
+    filter_glob : StringProperty(
             default="*.xml",
             options={'HIDDEN'},
             maxlen=255,  # Max internal buffer length, longer would be clamped.
@@ -78,7 +78,7 @@ class BoneRenameImportList(Operator, ImportHelper):
 
     # List of operator properties, the attributes will be assigned
     # to the class instance from the operator settings before calling.
-    opt_clear = BoolProperty(
+    opt_clear : BoolProperty(
             name="Clear Bone List",
             description="Clear the current list of bones on import",
             default=True,
@@ -99,7 +99,7 @@ def rename_bone(bone, bone_name):
     context = bpy.context
     #TODO: Clean this
     if bone:
-        if context.scene.BNR_replaceDuplicate:
+        if context.scene.bnr.replaceDuplicate:
             duplicate_bone = None
             for b in context.object.data.bones:
                 if b.name == bone_name:
@@ -142,7 +142,7 @@ def get_next_bone():
     return None
 
 ##TODO: FIX THIS
-class BNR_AddBoneName(bpy.types.Operator):
+class BNR_OT_AddBoneName(bpy.types.Operator):
     """Add a name to the bone list below"""
     bl_idname = "bone_rename.addname"
     bl_label = "Add Bone Name"
@@ -152,7 +152,7 @@ class BNR_AddBoneName(bpy.types.Operator):
         bpy.types.Scene.BNR_bone_list.append(context.scene.BNR_addBoneString)
         return {"FINISHED"}
 
-class BNR_ClearList(bpy.types.Operator):
+class BNR_OT_ClearList(bpy.types.Operator):
     """Clears the bone list"""
     bl_idname = "bone_rename.clearlist"
     bl_label = "Clear List"
@@ -164,7 +164,7 @@ class BNR_ClearList(bpy.types.Operator):
         context.scene.BNR_bone_order.clear()
         return {"FINISHED"}
 
-class BNR_Connect(bpy.types.Operator):
+class BNR_OT_Connect(bpy.types.Operator):
     """Moves tail end of parent bone to a child bone's head"""
     bl_idname = "bnr.connect"
     bl_label = "Connect"
@@ -209,7 +209,7 @@ class BNR_Connect(bpy.types.Operator):
         bone.tail = child_bone.head
         child_bone.use_connect = True
         #Recalculate bone roll
-        if context.scene.BNR_recalculateRoll:
+        if context.scene.bnr.recalculateRoll:
             #Get axis direction to recalculate
             direction = ""
             #X+
@@ -221,7 +221,7 @@ class BNR_Connect(bpy.types.Operator):
             #Execute recalculate
             bpy.ops.armature.calculate_roll(type=direction)
         #Select next bone in chain if option set to true
-        if context.scene.BNR_followChainBool:
+        if context.scene.bnr.followChain:
             bone.select = False
             child_bone.select = True
         #Change mode back
@@ -229,12 +229,12 @@ class BNR_Connect(bpy.types.Operator):
         return {'FINISHED'}
 
 ######### PIE CHILD SELECTOR ###########
-class BNR_PieChainMenu(bpy.types.Operator):
+class BNR_OT_PieChainMenu(bpy.types.Operator):
 
     bl_idname = "bnr.pie_chain_menu"
     bl_label = "Add Quick Node"
     
-    bone_name = bpy.props.StringProperty()
+    bone_name : bpy.props.StringProperty()
     @classmethod
     def poll(cls, context):
         if get_selected_bone():
@@ -247,7 +247,7 @@ class BNR_PieChainMenu(bpy.types.Operator):
         context.object.data.bones[self.bone_name].select = True
         return {'FINISHED'}
     
-class BNR_piechain_template(bpy.types.Menu):
+class BNR_MT_piechain_template(bpy.types.Menu):
     # label is displayed at the center of the pie menu.
     bl_label = "Select Bone"
     
@@ -265,13 +265,13 @@ class BNR_piechain_template(bpy.types.Menu):
             pie.operator("bnr.pie_chain_menu", b.name).bone_name = b.name
 ########################################
 
-class BNR_RenameBone(bpy.types.Operator):
+class BNR_OT_RenameBone(bpy.types.Operator):
     """Rename bone to current button's name"""
     bl_idname = "bone_rename.renamebone"
     bl_label = "Rename Bone"
     bl_options = {"UNDO"}
     
-    bone_name = bpy.props.StringProperty(name="Bone")
+    bone_name : bpy.props.StringProperty(name="Bone")
     
     @classmethod
     def poll(self, context):
@@ -294,20 +294,20 @@ class BNR_RenameBone(bpy.types.Operator):
 
         #Goto next bone
         next_bone = get_next_bone()
-        if next_bone and context.scene.BNR_followChainBool == True:
+        if next_bone and context.scene.bnr.followChain == True:
             get_selected_bone().select = False
             next_bone.select = True
         
         bpy.ops.object.mode_set(mode=current_mode)
         return {"FINISHED"}
 
-class BNR_RenameBoneConfirmOperator(bpy.types.Operator):
+class BNR_OT_RenameBoneConfirmOperator(bpy.types.Operator):
     """TEST QUOTES"""
     bl_idname = "bnr.rename_panel"
     bl_label = "Rename Bone"
     bl_options = {"UNDO"}
     
-    type = StringProperty(default="", options={'SKIP_SAVE'})
+    type : StringProperty(default="", options={'SKIP_SAVE'})
     #bpy.types.Scene.BNR_addBoneString = bpy.props.StringProperty(default="Bone")
     
     @classmethod
@@ -327,7 +327,7 @@ class BNR_RenameBoneConfirmOperator(bpy.types.Operator):
     def draw(self, context):
         self.layout.prop(self, "type", text="")
 #TODO: Add bone selecting pie menu if pie option is enabled
-class BNR_RenameChain(bpy.types.Operator):
+class BNR_OT_RenameChain(bpy.types.Operator):
     """Rename a chain of bones up to when the chain forks based on bone list structure"""
     bl_idname = "bnr.rename_chain"
     bl_label = "Rename Chain"
@@ -418,7 +418,7 @@ class BNR_RenameChain(bpy.types.Operator):
                             rename_bone(bones, context.scene.BNR_bone_order[index + count])
                             count += 1
                         #Select last bone and de-select first in chain
-                        if context.scene.BNR_followChainBool:
+                        if context.scene.bnr.followChain:
                             cur_bone.select = False
                             bones.select = True
                 
@@ -431,17 +431,13 @@ def draw_text_3d(font_id, color, pos, width, height, msg):
 
     blf.position(font_id, pos[0] + 10, pos[1], 0)
     blf.size(font_id, width, height)
-
-    bgl.glEnable(bgl.GL_BLEND)
         
-    bgl.glColor4f(color[0], color[1], color[2], color[3])
+    blf.color(0, color[0], color[1], color[2], color[3])
     blf.draw(font_id, msg)    
         
     #Set gl back to defaults
     
-    bgl.glColor4f(1.0, 1.0, 1.0, 1.0)
-    
-    bgl.glEnd()
+    blf.color(0, 1.0, 1.0, 1.0, 1.0)
     
 def draw_text_outline_3d(font_id, color, outline_color, pos, width, height, msg):
     #Outline
@@ -569,7 +565,7 @@ def bnr_draw_names_callback():
                                  height,
                                  b.name
             )
-        elif len(bpy.context.scene.BNR_bone_order) > 0 and b.name not in bpy.context.scene.BNR_bone_order:
+        elif len(bpy.types.Scene.BNR_bone_order) > 0 and b.name not in bpy.types.Scene.BNR_bone_order:
             #Not in list
             draw_text_3d(font_id,
                                  not_in_list_color,
@@ -601,7 +597,7 @@ class BNR_DrawNames:
 
 #Function to call when toggling "Draw Names" checkbox
 def bnr_draw_names(self, context):
-    b = bpy.context.scene.BNR_drawNames
+    b = bpy.context.scene.bnr.drawNames
     if b:
         bpy.types.Scene.bnr_widgets["draw_names"] = BNR_DrawNames()
     else:
@@ -611,23 +607,29 @@ def bnr_draw_names(self, context):
 
 ###############END Drawing Names###############
 
+class BNR_PG_settings(bpy.types.PropertyGroup):
+    addBoneString    : StringProperty(default="Bone")
+    followChain  : BoolProperty(default=True)
+    hideMatching     : BoolProperty(default=True)
+    replaceDuplicate : BoolProperty(default=False)
+    drawNames        : BoolProperty(default=False, update=bnr_draw_names)
+    recalculateRoll  : BoolProperty(default=True)
+
 #"Bone Name Rangler" panel class, the gui
-class BonePanel(bpy.types.Panel):
-    bl_idname      = "DATA_PT_bone_rangler"
+class TOOLS_PT_BNR_Create(bpy.types.Panel):
     bl_label       = "Bone Name Rangler"
+    bl_idname      = "TOOLS_PT_BNR_Create"
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_context     = "data"
-    bpy.types.Scene.BNR_addBoneString    = StringProperty(default="Bone")
-    bpy.types.Scene.BNR_followChainBool  = BoolProperty(default=True)
-    bpy.types.Scene.BNR_hideMatching     = BoolProperty(default=True)
-    bpy.types.Scene.BNR_replaceDuplicate = BoolProperty(default=False)
-    bpy.types.Scene.BNR_drawNames        = BoolProperty(default=False, update=bnr_draw_names)
-    bpy.types.Scene.BNR_recalculateRoll  = BoolProperty(default=True)
-    bpy.types.Scene.BNR_bone_list = {}
-    bpy.types.Scene.BNR_bone_order = []
+    bl_category    = 'BNR'
     
-    #TODO: Clean up names used for layout here
+    
+    @classmethod
+    def poll(self, context):
+        if context.mode == "POSE" or context.mode == "EDIT_ARMATURE":
+            return True
+        return False
+    
     def draw(self, context):
         if context.object == None:
             return
@@ -636,13 +638,13 @@ class BonePanel(bpy.types.Panel):
             bone = get_selected_bone()
 
             #region     #/ TEMP /#
-            layout.operator("wm.call_menu_pie", "BNR_piechain_template").name = "BNR_piechain_template"
+            layout.operator("wm.call_menu_pie", text="BNR_piechain_template").name = "BNR_piechain_template"
             #endregion  #/ TEMP /#
             #region     #/ Bone List Manipulation /#
             if bone is not None:
-                layout.prop(bone, "name", "", icon="BONE_DATA")
+                layout.prop(bone, "name", text="", icon="BONE_DATA")
             else:
-                layout.label("No bone selected")            
+                layout.label(text="No bone selected")            
 
             ##TODO:// Fix adding bones
             """
@@ -659,43 +661,43 @@ class BonePanel(bpy.types.Panel):
             option_col = layout.column(align=True)
             t = option_col.row()
             t.alignment = "CENTER"
-            t.label("Armature Options")
+            t.label(text="Armature Options")
             option_armature_col = option_col.column()
             #LAYERS
             t = option_armature_col.column()
-            t.prop(context.object.data, "layers", "")
+            t.prop(context.object.data, "layers", text="")
             
             option_armature_row = option_armature_col.row()
             #LEFT
             t = option_armature_row.column()
-            t.prop(context.scene, "BNR_drawNames", "Draw Names")
+            t.prop(context.scene.bnr, "drawNames", text="Draw Names")
             #RIGHT
             t = option_armature_row.column()
-            t.prop(context.object, "show_x_ray")            
+            t.prop(context.object, "show_in_front")            
             #endregion  #/ Armature Options /#
             #region     #/ BNR Options #/
             t = option_col.row()
             t.alignment = "CENTER"
-            t.label("Bone Name Replacement Options")
+            t.label(text="Bone Name Replacement Options")
             
             option_row = option_col.row()
             t = option_row.column()
-            t.prop(context.scene, "BNR_followChainBool", "Follow Chain")
-            t.prop(context.scene, "BNR_replaceDuplicate", "Replace Old")
+            t.prop(context.scene.bnr, "followChain", text="Follow Chain")
+            t.prop(context.scene.bnr, "replaceDuplicate", text="Replace Old")
             
             t = option_row.column()
-            t.prop(context.scene, "BNR_hideMatching", "Hide Matching")
+            t.prop(context.scene.bnr, "hideMatching", text="Hide Matching")
             
             bl_col = layout.column()
             bl_inner_col = bl_col.column()
             #endregion  #/ BNR Options #/
             #region     #/ Connect Stuff /#
             
-            option_col.operator("bnr.connect", "Connect (Tail > Head)")
+            option_col.operator("bnr.connect", text="Connect (Tail > Head)")
             ##
             connect_row = option_col.row()
             t = connect_row.column()
-            t.prop(context.scene, "BNR_recalculateRoll", "Calculate Roll")
+            t.prop(context.scene.bnr, "recalculateRoll", text="Calculate Roll")
             #endregion  #/ Connect Stuff /#
             #region     #/ Bone List /#
             if len(bpy.types.Scene.BNR_bone_order) > 0:
@@ -704,16 +706,16 @@ class BonePanel(bpy.types.Panel):
                 t.operator("bnr.rename_chain")
                 
                 qbl_row = bl_inner_col.row()
-                qbl_row.label("Quick Bone List:")
+                qbl_row.label(text="Quick Bone List:")
                 qbl_row.alignment = "RIGHT"
-                qbl_row.operator("bone_rename.clearlist", "Clear List", icon="X")
+                qbl_row.operator("bone_rename.clearlist", text="Clear List", icon="X")
                 qbl_row.alignment = "EXPAND"
 
                 
                 ####Begin drawing defined bone list buttons
                 #Build armature bone name list
                 a_bone_list = []
-                if context.scene.BNR_hideMatching == True:
+                if context.scene.bnr.hideMatching == True:
                     armature_bones = context.object.data.bones
                     for b in armature_bones:
                         a_bone_list.append(b.name)
@@ -733,41 +735,42 @@ class BonePanel(bpy.types.Panel):
                 ##Iterate over BNR list and do shit to figure out what to add to list in that moment
                 for b in bpy.types.Scene.BNR_bone_order:
                     bl_row = bl_col.row()
-                    if context.scene.BNR_hideMatching == True:
+                    if context.scene.bnr.hideMatching == True:
                         if b not in a_bone_list:
-                            bl_row.operator("bone_rename.renamebone", b).bone_name = b
+                            bl_row.operator("bone_rename.renamebone", text=b).bone_name = b
                         else:
                             hidden_count += 1
                     elif bone is None:
-                        bl_row.operator("bone_rename.renamebone", b).bone_name = b
+                        bl_row.operator("bone_rename.renamebone", text=b).bone_name = b
                     else:
                         if bone.name == b:
-                            bl_row.operator("bone_rename.renamebone", b, icon="BONE_DATA").bone_name = b
+                            bl_row.operator("bone_rename.renamebone", text=b, icon="BONE_DATA").bone_name = b
                         elif parent_name == b:
-                            bl_row.operator("bone_rename.renamebone", b, icon="KEYTYPE_EXTREME_VEC").bone_name = b
+                            bl_row.operator("bone_rename.renamebone", text=b, icon="KEYTYPE_EXTREME_VEC").bone_name = b
                         elif b in child_names:
-                            bl_row.operator("bone_rename.renamebone", b, icon="KEYTYPE_JITTER_VEC").bone_name = b                            
+                            bl_row.operator("bone_rename.renamebone", text=b, icon="KEYTYPE_JITTER_VEC").bone_name = b                            
                         else:
-                            bl_row.operator("bone_rename.renamebone", b).bone_name = b
+                            bl_row.operator("bone_rename.renamebone", text=b).bone_name = b
                     
                     
 
                     bone_count += 1
-                if context.scene.BNR_hideMatching == True:
-                    bl_inner_col.label("({0}/{1} Hidden due to matching)".format(hidden_count, bone_count))
+                if context.scene.bnr.hideMatching == True:
+                    bl_inner_col.label(text="({0}/{1} Hidden due to matching)".format(hidden_count, bone_count))
             #endregion  #/ Bone List /#
 
 bnr_class_list = [
-    BNR_RenameChain,
-    BNR_ClearList,
-    BNR_Connect,
+    BNR_OT_RenameChain,
+    BNR_OT_ClearList,
+    BNR_OT_Connect,
     BoneRenameImportList,
-    BNR_RenameBone,
-    BNR_RenameBoneConfirmOperator,
-    BNR_AddBoneName,
-    BNR_PieChainMenu,
-    BNR_piechain_template,
-    BonePanel
+    BNR_OT_RenameBone,
+    BNR_OT_RenameBoneConfirmOperator,
+    BNR_OT_AddBoneName,
+    BNR_OT_PieChainMenu,
+    BNR_MT_piechain_template,
+    BNR_PG_settings,
+    TOOLS_PT_BNR_Create
 ]
 
 addon_keymaps = []
@@ -799,6 +802,9 @@ def register():
     #bpy.data.window_managers[0].keyconfigs.active.keymaps['Pose'].keymap_items.new('bnr.rename_panel',value='PRESS',type='E',ctrl=True,alt=False,shift=False,oskey=False)     
     for c in bnr_class_list:
         bpy.utils.register_class(c)
+    bpy.types.Scene.bnr = bpy.props.PointerProperty(type=BNR_PG_settings)
+    bpy.types.Scene.BNR_bone_order = []
+    bpy.types.Scene.BNR_bone_list = {}
             
 def unregister():
     for widget in bpy.types.Scene.bnr_widgets:
